@@ -115,6 +115,7 @@ void imu_read(void * unused)
                    printf( "cal   %f %f %f     ", calx/500,caly/500,calz/500);
                    printf( "   %f %f %f \n", gcalx/500,gcaly/500,gcalz/500);
                 }
+		//vTaskDelay(1);
                 ++cal_cnt;
             } //end of cal
         } //end of samples
