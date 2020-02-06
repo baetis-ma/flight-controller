@@ -2,16 +2,16 @@
 
 static void imu_init (spi_device_handle_t device) 
 {
-   writeByte( device, 0x19, 0x00); /* Sample Rate Div not used in rates >= 1K */
-   writeByte( device, 0x1a, 0x00); /* Config - fifo overflow, no sync*/
-   writeByte( device, 0x1b, 0x00); /* Gyro Config - range +/-250dps, bypass dlpf 8Ksamp 250LP*/
-   writeByte( device, 0x1c, 0x00); /* Accel Config - range +/-2g */
-   writeByte( device, 0x1d, 0x0c); /* Accel Config 1 -x00 4ksamp 1khz/1ksamp 0x08=200hz x0a=100 x0e=5 x0f=420 */
-   writeByte( device, 0x23, 0x78); /* fifo enable - gyroscope and accel */
-   writeByte( device, 0x6b, 0x00); /* Power Management 1 */
-   writeByte( device, 0x6c, 0x00); /* Power Management 2 */
-   writeByte( device, 0x6a, 0x40); /* User Control - enable fifo*/
-   writeByte( device, 0x68, 0x07); /* Signal Path Reset */
+   spi_write_byte( device, 0x19, 0x00); /* Sample Rate Div not used in rates >= 1K */
+   spi_write_byte( device, 0x1a, 0x00); /* Config - fifo overflow, no sync*/
+   spi_write_byte( device, 0x1b, 0x00); /* Gyro Config - range +/-250dps, bypass dlpf 8Ksamp 250LP*/
+   spi_write_byte( device, 0x1c, 0x00); /* Accel Config - range +/-2g */
+   spi_write_byte( device, 0x1d, 0x0c); /* Accel Config 1 -x00 4ksamp 1khz/1ksamp 0x08=200hz x0a=100 x0e=5 x0f=420 */
+   spi_write_byte( device, 0x23, 0x78); /* fifo enable - gyroscope and accel */
+   spi_write_byte( device, 0x6b, 0x00); /* Power Management 1 */
+   spi_write_byte( device, 0x6c, 0x00); /* Power Management 2 */
+   spi_write_byte( device, 0x6a, 0x40); /* User Control - enable fifo*/
+   spi_write_byte( device, 0x68, 0x07); /* Signal Path Reset */
 }
 
 void imu_read(void * unused)
@@ -29,13 +29,13 @@ void imu_read(void * unused)
     float yFusion_T = (0.50/rateg)/(1+0.50/rateg); 
     float zGyro_T   = (0.50/rateg)/(1+0.50/rateg); 
 
-    writeByte( spi, 0x6a, 0x44); /* reset fifo */
+    spi_write_byte(vspi, 0x6a, 0x44); /* reset fifo */
     while (1) {
-        readBytes(spi, 0x72, 2, temp_buffer);
+        spi_read_bytes(vspi, 0x72, 2, temp_buffer);
         int samples = 256 * temp_buffer[0] + temp_buffer[1];
         if(samples > 256)samples=256;  //max size of system
         samples = samples / 12;
-        if(samples>0){ readBytes(spi, 0x74, 12 * samples, buffer); }
+        if(samples>0){ spi_read_bytes(vspi, 0x74, 12 * samples, buffer); }
         for (int n = 0; n <samples; n++){
             nsamp++;
             //accelerometers raw calibrated and filtered - 1K sample rate (1/8 of gyro)
@@ -88,6 +88,7 @@ void imu_read(void * unused)
             if ((nsamp % 128) == 1){
                 theta = -1.0 * asin(xAccl_LP / sqrt(xAccl_LP*xAccl_LP+zAccl_LP*zAccl_LP));
                 phi   =  1.0 * asin(yAccl_LP / sqrt(yAccl_LP*yAccl_LP+zAccl_LP*zAccl_LP));
+                //printf("theta=%5.2f  phi=%5.2f\n", 57.3*theta, 57.3*phi);
                 //xAccl_Int = 0.99 * xAccl_Int + 0.01 * 57.3 * phi;
                 //yAccl_Int = 0.99 * yAccl_Int + 0.01 * 57.3 * theta;
             }

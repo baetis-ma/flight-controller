@@ -23,19 +23,29 @@ char  blackbox_str[256];
 #include "driver/mcpwm.h"
 #include "soc/mcpwm_reg.h"
 #include "soc/mcpwm_struct.h"
-#define GPIO_MCPWM0A         18 //motor1
-#define GPIO_MCPWM0B         19 //motor2
-#define GPIO_MCPWM1A         21 //motor3
-#define GPIO_MCPWM1B         22 //motor4
+#define GPIO_MCPWM0A   32       //motor1
+#define GPIO_MCPWM0B   25       //motor2
+#define GPIO_MCPWM1A   35       //motor3
+#define GPIO_MCPWM1B   34       //motor4
 
-//requirements for spi
-#define MISO_PIN  17       //ad0
-#define MOSI_PIN  5        //sda
-#define SCLK_PIN  23       //scl
-#define CS_PIN    16       //ncs
-#define SPI_CLOCK 10000000  // 10 MHz - must be >> 1M for 8ksamp/sec
-#include "./include/spi.h"
+//requirements for hspi attached to nrf24l01
+#define HSPI_MISO_PIN  14       //ad0
+#define HSPI_MOSI_PIN  27       //sda
+#define HSPI_SCLK_PIN  12       //scl
+#define HSPI_CS_PIN    26       //ncs
+#define HSPI_SPI_CLOCK 1000000  //1MHz 
+#include "./include/hspi.h"
 
+#define NRF24L01_CE    13
+#include "./include/nrf24l01.h"
+
+//requirements for vspi attached to mpu9250
+#define VSPI_MISO_PIN  17       //ad0
+#define VSPI_MOSI_PIN  5        //sda
+#define VSPI_SCLK_PIN  23       //scl
+#define VSPI_CS_PIN    16       //ncs
+#define VSPI_SPI_CLOCK 10000000  // 10 MHz - must be >> 1M for 8ksamp/sec
+#include "./include/vspi.h"
 
 //requirements for imu
 //imu globals
@@ -55,31 +65,41 @@ float zSig, zErr, zPgain = 0.00, zIgain = 0.000, zDgain = 60, zInt = 0, zDer, zL
 float aSig, aErr, aPgain = 0.00, aIgain = 0.000, aDgain =  0, aInt = 0, aDer, aLast = 0; //altitude
 #include "./include/imu.h"
 
-void printcrap() {
-    while(1){
-       printf("accelxyz %7.3f %7.3f %7.3f       theta=%7.2f   phi=%7.2f\n", 
-           xAccl, yAccl, zAccl, -57.3*theta, 57.3*phi);
+void app_main() {
+    nvs_flash_init();
+    
+    vspi_init();
+    imu_init (vspi); 
+    vTaskDelay(50/portTICK_RATE_MS);  
 
+    hspi_init();
+    nrf24_gpio_init();
+
+    uint8_t data[32];
+    for(int a=0; a<0x1d; a++){
+        printf("reg 0x%02x  content 0x%02x\n",a, spiReadByte(hspi, a, data));
+        vTaskDelay(10);
+    }
+
+    xTaskCreatePinnedToCore (imu_read, "imu_read", 8096, NULL, 5, NULL, 1);
+    vTaskDelay(1);
+    //xTaskCreatePinnedToCore (printcrap, "printcrap", 2048, NULL, 4, NULL, 0);
+
+//void printcrap() {
+    while(1){
+       vTaskDelay(10);
        scanf("%c", &col);
        if (col == 'c') cal_cnt = 0;
        col = 0;
+       vTaskDelay(10);
+       printf("accelxyz %7.3f %7.3f %7.3f       theta=%7.2f   phi=%7.2f\n", 
+           xAccl, yAccl, zAccl, -57.3*theta, 57.3*phi);
 
-       vTaskDelay(50);
+       vTaskDelay(40);
     }
-}
+//}
 
-
-void app_main() {
-    esp_err_t ret = nvs_flash_init();
-
-    spi_init();
-    imu_init (spi); 
-    vTaskDelay(50/portTICK_RATE_MS);  
-
-    xTaskCreatePinnedToCore (imu_read, "imu_read", 8096, NULL, 5, NULL, 0);
-    vTaskDelay(5);
-    xTaskCreatePinnedToCore (printcrap, "printcrap", 4096, NULL, 4, NULL, 1);
-
-    removeDevice(spi);
+    removeDevice(vspi);
+    removeDevice(hspi);
     vTaskDelay(1);
 }

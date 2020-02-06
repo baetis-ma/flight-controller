@@ -1,0 +1,2 @@
+idf_component_register(SRCS "fc.c"
+                    INCLUDE_DIRS "")
