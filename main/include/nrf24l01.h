@@ -19,11 +19,12 @@ int nrf24_receive_pkt ( uint8_t *data, int timeout) {
     int waitcnt = 0;
     while(1){
         spiReadByte (hspi, 0x07, data);
-        if( (data[0] & 0x40) > 1 || waitcnt > timeout) break;
+        //ets_delay_us(1000);                          //busy-wait
         vTaskDelay(1);
+        if( (data[0] & 0x40) > 1 || waitcnt > timeout) break;
         ++waitcnt;
     }
-    if (waitcnt > timeout) printf("wait timed out\n");
+    //if (waitcnt > timeout) printf("wait timed out\n");
 
     //read packet from nrf24l01 transmitter
     spiReadBytes ( hspi, 0x61, 32+1, data);
