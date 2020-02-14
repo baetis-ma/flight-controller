@@ -18,6 +18,9 @@ int   cal_cnt = 0, astate = 0, calib = 0;
 char  col = 0;
 char  blackbox_str[256];
 
+//measure voltage
+#include <driver/adc.h>
+
 //requirements for mcpwm
 #include "esp_attr.h"
 #include "driver/mcpwm.h"
@@ -91,25 +94,24 @@ void app_main() {
 
     int cnt = 0;
     int motor1=1000, motor2=1000, motor3=1000, motor4=1000;
+    int temp_int;
     float height = 3.72;
     float xdisp = -1.6;
     float ydisp = -0.1;
     float voltage = 12.1;
-    //bookkepp these elsewhere share globally
-    int8_t blackbox_str[32];
-    blackbox_str[2] = 10*height; 
-    blackbox_str[3] = 10*xdisp; 
-    blackbox_str[4] = 10*ydisp; 
-    blackbox_str[5] = motor1/256; data[6] = motor1%256;
-	blackbox_str[7] = motor2/256; data[8] = motor2%256;
-	blackbox_str[9] = motor3/256; data[10] = motor3%256;
-	blackbox_str[11] = motor4/256; data[12] = motor4%256;
-	blackbox_str[13] = (int8_t)10.0*(voltage-10.0);
+    float heightprog= -5.3;
+    float heading= 90.5;
+    float headingprog= 91.5;
 
     int timeout = 30;
     int waitcnt;
     while(1){
        ++cnt;
+       //measure voltage
+       adc1_config_width(ADC_WIDTH_BIT_12);
+       adc1_config_channel_atten(ADC1_CHANNEL_0,ADC_ATTEN_DB_0);
+       voltage = (float) adc1_get_raw(ADC1_CHANNEL_0);
+       printf("voltage = %5.2f\n", voltage);
        //wait for packet from transmitter - if no packets over 10 timeouts land
        waitcnt = nrf24_receive_pkt ((uint8_t*)data, timeout);
        if (waitcnt < timeout){
@@ -124,6 +126,23 @@ void app_main() {
        //send blackbox data to transmitter
        if (waitcnt < timeout){
            blackbox_str[0] = cnt/256; blackbox_str[1] = cnt%256;
+           blackbox_str[2] = (uint8_t)128+height;
+           blackbox_str[3] = (uint8_t)128+heightprog;
+           blackbox_str[4] = (uint8_t)heading/2;
+           blackbox_str[5] = (uint8_t)headingprog/2;
+           blackbox_str[6] = (uint8_t)128+xdisp; 
+           blackbox_str[7] = (uint8_t)128+ydisp; 
+           temp_int = (int)(100 * (180 + -57.3*theta));
+           blackbox_str[8] = (int8_t)(temp_int/256);
+           blackbox_str[9] = (int8_t)(temp_int%256);
+           temp_int = (int)(100 * (180 + 57.3*phi));
+           blackbox_str[10] = (int8_t)(temp_int/256);
+           blackbox_str[11] = (int8_t)(temp_int%256);
+           blackbox_str[12] = motor1/256; data[13] = motor1%256;
+           blackbox_str[14] = motor2/256; data[15] = motor2%256;
+           blackbox_str[16] = motor3/256; data[17] = motor3%256;
+           blackbox_str[18] = motor4/256; data[19] = motor4%256;
+           blackbox_str[20] = (int8_t)10.0*(14.1-10.0);
 
            nrf24_transmit_pkt ((uint8_t*)blackbox_str, 32);
        }
