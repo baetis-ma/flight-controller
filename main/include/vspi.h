@@ -80,12 +80,12 @@ esp_err_t spi_write_bytes(spi_device_handle_t handle, uint8_t regAddr, size_t le
     transaction.rx_buffer = NULL;
     esp_err_t err = spi_device_transmit(handle, &transaction);
     assert ( err == ESP_OK );
-        if (!err) { 
-            char str[length*5+1];
-            for(size_t i = 0; i < length; i++) 
-                sprintf(str+i*5, "0x%s%x ", (data[i] < 0x10 ? "0" : ""), data[i]);
-            printf("write reg 0x%x, data: %s\n", regAddr, str);
-        }
+        //if (!err) { 
+        //    char str[length*5+1];
+        //    for(size_t i = 0; i < length; i++) 
+        //        sprintf(str+i*5, "0x%s%x ", (data[i] < 0x10 ? "0" : ""), data[i]);
+        //    printf("write reg 0x%x, data: %s\n", regAddr, str);
+        //}
     return err;
 }
 
