@@ -12,14 +12,24 @@
 #include "esp_system.h"
 #include "nvs_flash.h"
 #include "driver/spi_common.h"
+#include "driver/i2c.h"
+#include <math.h>
 
-int   seq, throttle=1000, yaw, pitch, roll, state;
-int   cal_cnt = 0, astate = 0, calib = 0;
-char  col = 0;
-char  blackbox_str[256];
 
 //measure voltage
 #include <driver/adc.h>
+#define QMC5883L_I2C_ADDR     0x0d //hmc5883 i2c address
+#define i2c_frequency       500000 // max frequency of i2c clk
+#define i2c_port                 0 //i2c channel on ESP-WROOM-32 ESP32S
+#define i2c_gpio_scl            19 //D19 on ESP-WROOM-32 ESP32S
+#define i2c_gpio_sda            18 //D18 on ESP-WROOM-32 ESP32S
+#include "./i2c-bus/i2c.h"
+#include "./i2c-bus/qmc5883l.h"
+
+#define BMP280_I2C_ADDR       0x76
+int digT1, digT2, digT3;
+int digP1, digP2, digP3, digP4, digP5, digP6, digP7, digP8, digP9;
+#include "./i2c-bus//bmp280.h"
 
 //requirements for mcpwm
 #include "esp_attr.h"
@@ -53,12 +63,13 @@ char  blackbox_str[256];
 //requirements for imu
 //imu globals
 float xAccl, yAccl, zAccl, xGyro, yGyro, zGyro;
-//float xAccl_Int=0.0, yAccl_Int=0.0, zAccl_Int=0.0;
 float xAccl_LP, yAccl_LP, zAccl_LP;
 float zGyro_Int=0;
 float xFusion, yFusion, zGyro_Int_HP;
 float gmag, theta, phi;
-int   nsamp = 0;
+int   seq, throttle=1000, yaw, pitch, roll, state;
+int   cal_cnt = 0, astate = 0, calib = 0, nsamp = 0;
+char  col = 0;
 //pid globals
 int   clearInts = 0;
 float xPIDout, yPIDout, zPIDout, aPIDout;
@@ -77,8 +88,22 @@ void attitude_control() {
      }
 }
 
+float meas_battery() {
+    adc1_config_width(ADC_WIDTH_BIT_12);
+    adc1_config_channel_atten(ADC1_CHANNEL_0,ADC_ATTEN_DB_0);
+    float voltage = 0.000268 * (float)adc1_get_raw(ADC1_CHANNEL_0);
+    return ( 1.00 * voltage );
+}
+
 void app_main() {
     signed char data[32];
+    int cnt = 0; int temp_int;
+    int motor1=1000, motor2=1000, motor3=1000, motor4=1000;
+    float height = 3.72; float heightprog= -5.3;
+    float heading= 90.5; float headingprog= 91.5;
+    float xdisp = -1.6; float ydisp = -0.1;
+    float batteryv = 10.1;
+
     nvs_flash_init();
     
     vspi_init();
@@ -88,35 +113,30 @@ void app_main() {
     hspi_init();
     nrf24_gpio_init();
 
+    //i2cdetect();
+    //bmp280_cal();
+    //qmc5883_init();
+
     xTaskCreatePinnedToCore (imu_read, "imu_read", 8096, NULL, 5, NULL, 1);
     vTaskDelay(10);
     xTaskCreatePinnedToCore (attitude_control, "attitude_control", 4096, NULL, 4, NULL, 0);
 
-    int cnt = 0;
-    int motor1=1000, motor2=1000, motor3=1000, motor4=1000;
-    int temp_int;
-    float height = 3.72;
-    float xdisp = -1.6;
-    float ydisp = -0.1;
-    float voltage = 12.1;
-    float heightprog= -5.3;
-    float heading= 90.5;
-    float headingprog= 91.5;
-
-    int timeout = 30;
-    int waitcnt;
+    int timeout = 30; int waitcnt;
+    float height_cal = 0;
+    char  blackbox_str[256];
     while(1){
        ++cnt;
-       //measure voltage
-       adc1_config_width(ADC_WIDTH_BIT_12);
-       adc1_config_channel_atten(ADC1_CHANNEL_0,ADC_ATTEN_DB_0);
-       voltage = (float) adc1_get_raw(ADC1_CHANNEL_0);
-       printf("voltage = %5.2f\n", voltage);
+       //gather some state - battery volt, magnetometer heading, height
+       //if (cnt == 10) height_cal = bmp280_read();
+       //printf("%10d  batt v = %5.3lf  ", cnt, meas_battery() );
+       //printf("heading = %3d degrees   ", qmc5883_read());
+       //printf("altitude = %6.2lf", 28.4 * (height_cal - bmp280_read()));
+       //printf("\n");
+
        //wait for packet from transmitter - if no packets over 10 timeouts land
        waitcnt = nrf24_receive_pkt ((uint8_t*)data, timeout);
        if (waitcnt < timeout){
-          printf("%8.4f   waited %3dmsec   ",
-              (float)esp_timer_get_time()/1000000, 10*waitcnt);
+          printf("%8.4f   waited %3dmsec   ", (float)esp_timer_get_time()/1000000, 10*waitcnt);
           sscanf((char*)data,"%d,%d,%d,%d,%d,%d",&seq, &throttle, &yaw, &pitch, &roll, &state);
           printf("seq = %d, remote %d %d %d %d, state = %d\n", seq,throttle,yaw,pitch,roll,state);
        } 
@@ -147,15 +167,15 @@ void app_main() {
            nrf24_transmit_pkt ((uint8_t*)blackbox_str, 32);
        }
 
-       //printf("accelxyz %7.3f %7.3f %7.3f       theta=%7.2f   phi=%7.2f\n", 
-       //    xAccl, yAccl, zAccl, -57.3*theta, 57.3*phi);
+       printf("accelxyz %7.3f %7.3f %7.3f       theta=%7.2f   phi=%7.2f\n", 
+           xAccl, yAccl, zAccl, -57.3*theta, 57.3*phi);
 
        //debug interface
        scanf("%c", &col);
        if (col == 'c') cal_cnt = 0;
        col = 0;
 
-       vTaskDelay(1);
+       vTaskDelay(2);
     }
 
     removeDevice(vspi);
